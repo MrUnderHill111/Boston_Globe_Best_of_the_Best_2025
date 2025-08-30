@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boston Globe Best of the Best 2025</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://unpkg.com/papaparse@latest/papaparse.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for better mobile experience */
+        .card-view {
+            display: none;
+        }
+        @media (max-width: 768px) {
+            .table-view {
+                display: none;
+            }
+            .card-view {
+                display: block;
+            }
+            body {
+                padding-bottom: 120px; /* Account for footer height on mobile */
+            }
+        }
+        @media (min-width: 769px) {
+            body {
+                padding-bottom: 80px; /* Account for footer height on desktop */
+            }
+        }
+        
+        /* Sticky header for mobile */
+        .sticky-header {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: white;
+            border-bottom: 2px solid #e5e7eb;
+        }
+        
+        /* Card styles */
+        .business-card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .business-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        /* Footer adjustments */
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 20;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <div class="container mx-auto px-2 sm:px-4 lg:px-6">
+        <!-- Header -->
+        <div class="sticky-header py-4">
+            <h1 class="text-2xl sm:text-3xl font-bold mb-4 text-center text-gray-800">Boston Globe's 'Best of the Best' 2025</h1>
+            <p class="text-center text-sm text-gray-600 mb-4">Top Voted Restaurants & Activities</p>
+
+            <!-- Filters -->
+            <div class="flex flex-col sm:flex-row gap-3 mb-4 justify-center">
+                <div class="flex-1 max-w-xs">
+                    <label for="categorySelect" class="block text-sm font-medium text-gray-700 mb-1">Category:</label>
+                    <select id="categorySelect" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="All">All Categories</option>
+                    </select>
+                </div>
+                <div class="flex-1 max-w-xs">
+                    <label for="neighborhoodSelect" class="block text-sm font-medium text-gray-700 mb-1">Neighborhood:</label>
+                    <select id="neighborhoodSelect" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="All">All Neighborhoods</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Results counter -->
+            <div id="resultsCounter" class="text-center text-sm text-gray-600 mb-4 hidden">
+                Showing <span id="resultCount">0</span> results
+            </div>
+        </div>
+
+        <!-- Loading indicator -->
+        <div id="loading" class="text-center text-gray-600 py-8">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
+            <div>Loading data...</div>
+        </div>
+
+        <!-- Desktop Table View -->
+        <div id="recommendationsTable" class="table-view hidden bg-white shadow-lg rounded-lg overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="bg-blue-600 text-white">
+                            <th class="p-3 text-left font-semibold">Business Name</th>
+                            <th class="p-3 text-left font-semibold">Category</th>
+                            <th class="p-3 text-left font-semibold">Address</th>
+                            <th class="p-3 text-left font-semibold">Neighborhood</th>
+                            <th class="p-3 text-left font-semibold">Phone</th>
+                            <th class="p-3 text-left font-semibold">Website</th>
+                            <th class="p-3 text-left font-semibold">Description</th>
+                            <th class="p-3 text-left font-semibold">Specialty</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Mobile Card View -->
+        <div id="cardView" class="card-view space-y-4">
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer bg-gray-800 text-white text-center py-3 sm:py-4">
+        <div class="px-4">
+            <p class="text-xs sm:text-sm">This tool compiles up to 300 selections from all 28 of the Boston Globe’s (2025) ‘Best of the Best’ lists, Questions? Contact me at <a href="mailto:Mr.Underhill@yahoo.com" class="underline hover:text-gray-300">Mr.Underhill@yahoo.com</a>.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Initializing state for data
+        let data = [];
+
+        // Cleaning header and cell values
+        function cleanValue(value) {
+            return value ? value.trim().replace(/^"|"$/g, '') : '';
+        }
+
+        // Populating dropdowns with unique values
+        function populateDropdowns(data) {
+            const categories = [...new Set(data.map(row => cleanValue(row['Category'])))].sort();
+            const neighborhoods = [...new Set(data.map(row => cleanValue(row['Neighborhood'])))].sort();
+
+            const categorySelect = $('#categorySelect');
+            const neighborhoodSelect = $('#neighborhoodSelect');
+
+            categories.forEach(category => {
+                categorySelect.append(`<option value="${category}">${category}</option>`);
+            });
+
+            neighborhoods.forEach(neighborhood => {
+                neighborhoodSelect.append(`<option value="${neighborhood}">${neighborhood}</option>`);
+            });
+        }
+
+        // Creating mobile card HTML
+        function createCard(row) {
+            const businessName = cleanValue(row['Business_Name']);
+            const category = cleanValue(row['Category']);
+            const address = cleanValue(row['Address']);
+            const neighborhood = cleanValue(row['Neighborhood']);
+            const phone = cleanValue(row['Phone']);
+            const website = cleanValue(row['Website']);
+            const description = cleanValue(row['Description']);
+            const specialty = cleanValue(row['Specialty']);
+
+            return `
+                <div class="business-card bg-white rounded-lg shadow-md p-4 border border-gray-200">
+                    <div class="mb-3">
+                        <h3 class="text-lg font-bold text-gray-800 mb-1">${businessName}</h3>
+                        <span class="inline-block bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-1 rounded-full">${category}</span>
+                    </div>
+                    
+                    ${address ? `
+                    <div class="mb-2 flex items-start">
+                        <svg class="w-4 h-4 text-gray-500 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
+                        </svg>
+                        <div>
+                            <div class="text-sm text-gray-700">${address}</div>
+                            ${neighborhood ? `<div class="text-xs text-gray-500">${neighborhood}</div>` : ''}
+                        </div>
+                    </div>
+                    ` : ''}
+                    
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
+                        ${phone ? `
+                        <a href="tel:${phone}" class="flex items-center text-sm text-blue-600 hover:text-blue-800">
+                            <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                            </svg>
+                            ${phone}
+                        </a>
+                        ` : ''}
+                        
+                        ${website ? `
+                        <a href="${website}" target="_blank" class="flex items-center text-sm text-blue-600 hover:text-blue-800">
+                            <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M4.083 9h1.946c.089-1.546.383-2.97.837-4.118A6.004 6.004 0 004.083 9zM10 2a8 8 0 100 16 8 8 0 000-16zm0 2c-.076 0-.232.032-.465.262-.238.234-.497.623-.737 1.182-.389.907-.673 2.142-.766 3.556h3.936c-.093-1.414-.377-2.649-.766-3.556-.24-.559-.5-.948-.737-1.182C10.232 4.032 10.076 4 10 4zm3.971 5c-.089-1.546-.383-2.97-.837-4.118A6.004 6.004 0 0115.917 9h-1.946zm-2.003 2H8.032c.093 1.414.377 2.649.766 3.556.24.559.5.948.737 1.182.233.23.389.262.465.262.076 0 .232-.032.465-.262.238-.234.498-.623.737-1.182.389-.907.673-2.142.766-3.556zm1.166 4.118c.454-1.147.748-2.572.837-4.118h1.946a6.004 6.004 0 01-2.783 4.118zm-6.268 0C6.412 13.97 6.118 12.546 6.03 11H4.083a6.004 6.004 0 002.783 4.118z" clip-rule="evenodd" />
+                            </svg>
+                            Visit Website
+                        </a>
+                        ` : ''}
+                    </div>
+                    
+                    ${description ? `
+                    <div class="mb-2">
+                        <p class="text-sm text-gray-700 leading-relaxed">${description}</p>
+                    </div>
+                    ` : ''}
+                    
+                    ${specialty ? `
+                    <div class="pt-2 border-t border-gray-100">
+                        <div class="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Specialty</div>
+                        <p class="text-sm text-gray-700">${specialty}</p>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        // Rendering the views with filtered data
+        function renderViews(category, neighborhood) {
+            const tableBody = $('#tableBody');
+            const cardView = $('#cardView');
+            
+            tableBody.empty();
+            cardView.empty();
+
+           const filteredData = data.filter(row => {
+    if (category === 'All' && neighborhood === 'All') {
+        return true;
+    }
+    const rowCategory = cleanValue(row['Category']);
+    const rowNeighborhood = cleanValue(row['Neighborhood']);
+    const categoryMatch = category === 'All' || rowCategory === category;
+    const neighborhoodMatch = neighborhood === 'All' || rowNeighborhood === neighborhood;
+    return categoryMatch && neighborhoodMatch;
+});
+
+            // Update results counter
+            $('#resultCount').text(filteredData.length);
+            $('#resultsCounter').removeClass('hidden');
+
+            // Render table rows for desktop
+            filteredData.forEach(row => {
+                const tr = $('<tr>').addClass('border-b hover:bg-gray-50 transition-colors');
+                tr.append(`<td class="p-3 font-medium text-gray-800">${cleanValue(row['Business_Name'])}</td>`);
+                tr.append(`<td class="p-3 text-gray-600">${cleanValue(row['Category'])}</td>`);
+                tr.append(`<td class="p-3 text-gray-600">${cleanValue(row['Address'])}</td>`);
+                tr.append(`<td class="p-3 text-gray-600">${cleanValue(row['Neighborhood'])}</td>`);
+                tr.append(`<td class="p-3 text-gray-600">${cleanValue(row['Phone'])}</td>`);
+                tr.append(`<td class="p-3">${row['Website'] ? `<a href="${cleanValue(row['Website'])}" class="text-blue-600 hover:text-blue-800 underline" target="_blank">Visit</a>` : ''}</td>`);
+                tr.append(`<td class="p-3 text-gray-600 max-w-xs truncate">${cleanValue(row['Description'])}</td>`);
+                tr.append(`<td class="p-3 text-gray-600 max-w-xs truncate">${cleanValue(row['Specialty'])}</td>`);
+                tableBody.append(tr);
+            });
+
+            // Render cards for mobile
+            filteredData.forEach(row => {
+                cardView.append(createCard(row));
+            });
+
+            $('#recommendationsTable').removeClass('hidden');
+            $('#cardView').removeClass('hidden');
+            $('#loading').addClass('hidden');
+        }
+
+       $.get('Boston_Globe_Best_of_the_Best_2025.csv')
+    .done(function(csvData) {
+        Papa.parse(csvData, {
+            header: true,
+            skipEmptyLines: false,
+            transformHeader: cleanValue,
+            complete: (results) => {
+                data = results.data;
+                populateDropdowns(data);
+                renderViews('All', 'All');
+            },
+            error: (err) => {
+                $('#loading').html(`<div class="text-red-600">Error loading data: ${err}</div>`);
+            }
+        });
+    })
+    .fail(function() {
+        $('#loading').html(`<div class="text-red-600">Failed to load CSV file</div>`);
+    });
+
+        // Handling dropdown change events
+        $('#categorySelect, #neighborhoodSelect').on('change', function() {
+            const category = $('#categorySelect').val();
+            const neighborhood = $('#neighborhoodSelect').val();
+            renderViews(category, neighborhood);
+        });
+    </script>
+</body>
+</html>
